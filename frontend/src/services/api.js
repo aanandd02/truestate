@@ -2,7 +2,6 @@
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-
 function buildQueryParams(filters) {
   const params = new URLSearchParams();
 
@@ -54,7 +53,7 @@ function buildQueryParams(filters) {
 
 export async function fetchSales(filters) {
   const qs = buildQueryParams(filters);
-  const url = `${BASE_URL}/sales${qs ? `?${qs}` : ""}`;
+  const url = `${BASE_URL}/api/sales${qs ? `?${qs}` : ""}`;
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -64,7 +63,7 @@ export async function fetchSales(filters) {
 }
 
 export async function fetchMetadata() {
-  const res = await fetch(`${BASE_URL}/sales/metadata`);
+  const res = await fetch(`${BASE_URL}/api/sales/metadata`);
   if (!res.ok) {
     throw new Error(`Failed to fetch metadata: ${res.status}`);
   }
