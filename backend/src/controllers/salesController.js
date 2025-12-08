@@ -1,37 +1,7 @@
-const { getFilteredSales, getSalesMetadata } = require("../services/salesService");
-
-let salesData = [];
-let csvLoaded = false;
-
-function setSalesData(data) {
-  salesData = data;
-  csvLoaded = true;
-}
-
-const ALLOWED_SORT_FIELDS = ["date", "quantity", "customerName"];
-const ALLOWED_SORT_ORDERS = ["asc", "desc"];
-
-function parseNumber(value) {
-  if (value === undefined || value === null || value === "") return null;
-  const num = Number(value);
-  return Number.isNaN(num) ? null : num;
-}
-
-function parseDateSafe(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
+const Sale = require("../models/Sale");
 
 async function getSales(req, res) {
   try {
-    if (!csvLoaded) {
-      return res.status(503).json({
-        success: false,
-        message: "CSV loading… try again shortly.",
-      });
-    }
-
     const {
       search,
       regions,
@@ -45,122 +15,90 @@ async function getSales(req, res) {
       endDate,
       sortBy,
       sortOrder,
-      page,
-      pageSize,
+      page = 1,
+      pageSize = 10,
     } = req.query;
 
-    const parseList = (value) =>
-      value
-        ? value
-            .split(",")
-            .map((v) => v.trim())
-            .filter(Boolean)
-        : [];
+    const query = {};
 
-    const ageMinNum = parseNumber(ageMin);
-    const ageMaxNum = parseNumber(ageMax);
-
-    if (ageMinNum !== null && ageMaxNum !== null && ageMinNum > ageMaxNum) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid age range: ageMin cannot be greater than ageMax",
-      });
+    // SEARCH
+    if (search) {
+      query.$or = [
+        { customerName: new RegExp(search, "i") },
+        { phoneNumber: new RegExp(search, "i") },
+      ];
     }
 
-    const startDateObj = parseDateSafe(startDate);
-    const endDateObj = parseDateSafe(endDate);
+    if (regions) query.customerRegion = { $in: regions.split(",") };
+    if (genders) query.gender = { $in: genders.split(",") };
+    if (categories) query.productCategory = { $in: categories.split(",") };
+    if (paymentMethods) query.paymentMethod = { $in: paymentMethods.split(",") };
 
-    if (startDate && !startDateObj) {
-      return res.status(400).json({ success: false, message: "Invalid startDate format" });
-    }
-    if (endDate && !endDateObj) {
-      return res.status(400).json({ success: false, message: "Invalid endDate format" });
-    }
-    if (startDateObj && endDateObj && startDateObj > endDateObj) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid date range: startDate cannot be greater than endDate",
-      });
+    if (tags) {
+      query.tags = { $all: tags.split(",").map((t) => t.toLowerCase()) };
     }
 
-    let finalSortBy = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : "date";
-    let finalSortOrder = ALLOWED_SORT_ORDERS.includes(sortOrder) ? sortOrder : "desc";
+    if (ageMin || ageMax) {
+      query.age = {};
+      if (ageMin) query.age.$gte = Number(ageMin);
+      if (ageMax) query.age.$lte = Number(ageMax);
+    }
 
-    let pageNum = parseNumber(page) || 1;
-    let pageSizeNum = parseNumber(pageSize) || 10;
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) query.date.$gte = new Date(startDate);
+      if (endDate) query.date.$lte = new Date(endDate);
+    }
 
-    if (pageNum < 1) pageNum = 1;
-    if (pageSizeNum < 1) pageSizeNum = 10;
-    if (pageSizeNum > 100) pageSizeNum = 100;
-
-    const options = {
-      search: search || "",
-      regions: parseList(regions),
-      genders: parseList(genders),
-      categories: parseList(categories),
-      tags: parseList(tags),
-      paymentMethods: parseList(paymentMethods),
-      ageMin: ageMinNum,
-      ageMax: ageMaxNum,
-      startDate: startDateObj,
-      endDate: endDateObj,
-      sortBy: finalSortBy,
-      sortOrder: finalSortOrder,
-      page: pageNum,
-      pageSize: pageSizeNum,
+    // SORTING
+    const sortFields = {
+      date: "date",
+      quantity: "quantity",
+      customerName: "customerName",
     };
 
-    const result = getFilteredSales(salesData, options);
+    const sort = {};
+    sort[sortFields[sortBy] || "date"] = sortOrder === "asc" ? 1 : -1;
 
-    const formattedData = result.data.map((row) => {
-      let dateFormatted = null;
+    const skip = (Number(page) - 1) * Number(pageSize);
+    const total = await Sale.countDocuments(query);
 
-      if (row.date) {
-        const d = new Date(row.date);
-        if (!Number.isNaN(d.getTime())) {
-          dateFormatted = d.toLocaleDateString("en-IN");
-        }
-      }
+    const data = await Sale.find(query).sort(sort).skip(skip).limit(Number(pageSize));
 
-      return {
-        ...row,
-        dateFormatted,
-        finalAmountFormatted:
-          typeof row.finalAmount === "number" ? row.finalAmount.toFixed(2) : null,
-        totalAmountFormatted:
-          typeof row.totalAmount === "number" ? row.totalAmount.toFixed(2) : null,
-      };
-    });
-
-    return res.json({
+    res.json({
       success: true,
-      data: formattedData,
-      total: result.total,
-      page: result.page,
-      pageSize: result.pageSize,
-      totalPages: result.totalPages,
+      data,
+      total,
+      page: Number(page),
+      pageSize: Number(pageSize),
+      totalPages: Math.ceil(total / pageSize),
     });
   } catch (err) {
-    console.error("Error in getSales:", err);
-    return res.status(500).json({ success: false, message: "Internal server error" });
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 }
 
 async function getSalesMeta(req, res) {
   try {
-    const meta = getSalesMetadata(salesData);
-    return res.json({ success: true, ...meta });
-  } catch (err) {
-    console.error("Error in getSalesMeta:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
+    const regions = await Sale.distinct("customerRegion");
+    const genders = await Sale.distinct("gender");
+    const categories = await Sale.distinct("productCategory");
+    const paymentMethods = await Sale.distinct("paymentMethod");
+    const tags = await Sale.distinct("tags");
+
+    res.json({
+      success: true,
+      regions,
+      genders,
+      categories,
+      paymentMethods,
+      tags,
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 }
 
-module.exports = {
-  getSales,
-  getSalesMeta,
-  setSalesData,
-};
+module.exports = { getSales, getSalesMeta };

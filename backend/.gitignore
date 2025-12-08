@@ -1,4 +1,6 @@
-# Logs
+###############################################
+# GLOBAL LOG FILES
+###############################################
 logs
 *.log
 npm-debug.log*
@@ -7,18 +9,71 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
+###############################################
+# ENV FILES (VERY IMPORTANT)
+###############################################
+.env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
 
-# Editor directories and files
+###############################################
+# NODE MODULES (Backend & Frontend)
+###############################################
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+###############################################
+# BUILD OUTPUT
+###############################################
+dist/
+dist-ssr/
+build/
+frontend/dist/
+frontend/build/
+
+###############################################
+# EDITOR / OS FILES
+###############################################
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+###############################################
+# OPTIONAL: DEBUG / CACHE DIRECTORIES
+###############################################
+.cache/
+.temp/
+.tmp/
+coverage/
+*.pid
+*.seed
+*.tgz
+
+###############################################
+# FRONTEND SPECIFIC
+###############################################
+*.local
+*.map
+
+###############################################
+# BACKEND SPECIFIC
+###############################################
+backend/uploads/
+backend/debug.log
+
+###############################################
+# DATA FILES (CSV OPTIONAL)
+# If you want to keep CSV private → ignore it
+###############################################
+data/*.csv
+data/*.CSV
+
